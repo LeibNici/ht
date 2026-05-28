@@ -23,17 +23,16 @@ jobs:
         shell: pwsh
         run: msbuild U8ApiAuthCheck.csproj /restore /p:Configuration=Release /p:Platform=x86 /m
 
-      - name: Package
+      - name: Stage artifact files
         shell: pwsh
         run: |
           $publish = Join-Path $env:GITHUB_WORKSPACE "publish"
           New-Item -ItemType Directory -Force -Path $publish | Out-Null
           Copy-Item "bin\x86\Release\*" $publish -Recurse -Force
-          Compress-Archive -Path "$publish\*" -DestinationPath "U8ApiAuthCheck-win-x86.zip" -Force
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: U8ApiAuthCheck-win-x86
-          path: U8ApiAuthCheck-win-x86.zip
+          path: publish/**
           if-no-files-found: error

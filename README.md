@@ -29,6 +29,6 @@ $env:U8_YEAR="<年度>"
 
 ## GitHub Actions 产物
 
-推送到 GitHub 后，`Build Windows EXE` workflow 会在 `windows-latest` 上编译 `Release|x86`，并上传 `U8ApiAuthCheck-win-x86` artifact。下载后解压，运行 `U8ApiAuthCheck.exe`。
+推送到 GitHub 后，`Build Windows EXE` workflow 会在 `windows-latest` 上编译 `Release|x86`，并上传 `U8ApiAuthCheck-win-x86` artifact。下载 artifact 后解压，运行 `U8ApiAuthCheck.exe`。
 
 注意：Actions 只负责生成 exe 和随包文件。实际登录 U8 仍需要在目标 Windows 机器上安装并注册匹配版本的 U8 客户端/API 组件。
