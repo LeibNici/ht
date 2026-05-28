@@ -10,7 +10,7 @@ namespace U8ApiAuthCheck
 {
     internal static class Program
     {
-        private static readonly string[] U8AppProgIds = { "U8Login.U8App", "U8API.U8App" };
+        private static readonly string[] DefaultU8AppProgIds = { "U8App.U8Login", "U8Login.U8App", "U8API.U8App" };
         private static readonly string[] U8AppTypeNames = { "U8Login.U8App, U8Login", "U8API.U8App, U8API" };
 
         private static int Main(string[] args)
@@ -37,7 +37,7 @@ namespace U8ApiAuthCheck
             object u8 = null;
             try
             {
-                u8 = CreateU8App();
+                u8 = CreateU8App(options.ProgId);
                 int ret = Convert.ToInt32(Invoke(u8, "Login", options.LoginArgs), CultureInfo.InvariantCulture);
                 if (ret != 0)
                 {
@@ -62,9 +62,9 @@ namespace U8ApiAuthCheck
             }
         }
 
-        private static object CreateU8App()
+        private static object CreateU8App(string configuredProgId)
         {
-            foreach (string progId in U8AppProgIds)
+            foreach (string progId in GetProgIds(configuredProgId))
             {
                 Type type = Type.GetTypeFromProgID(progId, false);
                 if (type != null)
@@ -82,7 +82,30 @@ namespace U8ApiAuthCheck
                 }
             }
 
-            throw new InvalidOperationException("未找到 U8App。请在运行机器安装并注册 U8 客户端/API 组件。");
+            throw new InvalidOperationException(BuildCreateObjectError(configuredProgId));
+        }
+
+        private static IEnumerable<string> GetProgIds(string configuredProgId)
+        {
+            if (!string.IsNullOrWhiteSpace(configuredProgId))
+            {
+                yield return configuredProgId;
+            }
+
+            foreach (string progId in DefaultU8AppProgIds)
+            {
+                if (!string.Equals(progId, configuredProgId, StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return progId;
+                }
+            }
+        }
+
+        private static string BuildCreateObjectError(string configuredProgId)
+        {
+            string tried = string.Join(", ", new List<string>(GetProgIds(configuredProgId)).ToArray());
+            return "未找到 U8App COM 对象。已尝试 ProgID：" + tried
+                + "。请确认在运行机器的 32 位 COM 注册表中能找到对应组件；如实际 ProgID 不同，请用 --prog-id 指定。";
         }
 
         private static object Invoke(object target, string methodName, object[] args)
@@ -174,8 +197,8 @@ namespace U8ApiAuthCheck
         private static void PrintUsage()
         {
             Console.WriteLine("用法：U8ApiAuthCheck.exe --server <服务器> --user <账号> --password <密码> --account <账套> --year <年度>");
-            Console.WriteLine("可选：--module IA --bill PurIn --no-pause");
-            Console.WriteLine("也支持环境变量：U8_SERVER, U8_USER, U8_PASSWORD, U8_ACCOUNT, U8_YEAR, U8_BILL_MODULE, U8_BILL_TYPE");
+            Console.WriteLine("可选：--module IA --bill PurIn --prog-id U8App.U8Login --no-pause");
+            Console.WriteLine("也支持环境变量：U8_SERVER, U8_USER, U8_PASSWORD, U8_ACCOUNT, U8_YEAR, U8_BILL_MODULE, U8_BILL_TYPE, U8_APP_PROG_ID");
         }
 
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -191,6 +214,7 @@ namespace U8ApiAuthCheck
         public string Year { get; private set; }
         public string Module { get; private set; }
         public string Bill { get; private set; }
+        public string ProgId { get; private set; }
         public bool Pause { get; private set; }
 
         public object[] LoginArgs
@@ -217,6 +241,7 @@ namespace U8ApiAuthCheck
                 Year = GetValue(values, "year", "U8_YEAR"),
                 Module = GetValue(values, "module", "U8_BILL_MODULE", "IA"),
                 Bill = GetValue(values, "bill", "U8_BILL_TYPE", "PurIn"),
+                ProgId = GetValue(values, "prog-id", "U8_APP_PROG_ID"),
                 Pause = !values.ContainsKey("no-pause")
             };
 

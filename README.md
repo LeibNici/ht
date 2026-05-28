@@ -13,7 +13,7 @@
 可选参数：
 
 ```powershell
---module IA --bill PurIn --no-pause
+--module IA --bill PurIn --prog-id U8App.U8Login --no-pause
 ```
 
 也可以使用环境变量：
@@ -26,6 +26,8 @@ $env:U8_ACCOUNT="<账套>"
 $env:U8_YEAR="<年度>"
 .\U8ApiAuthCheck.exe
 ```
+
+如果提示未找到 U8App，但机器确认已安装 U8，请先确认 U8 登录组件的真实 ProgID。程序默认依次尝试 `U8App.U8Login`、`U8Login.U8App`、`U8API.U8App`；如客户环境不同，可以用 `--prog-id <ProgID>` 或环境变量 `U8_APP_PROG_ID` 指定。
 
 ## GitHub Actions 产物
 
