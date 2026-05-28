@@ -10,8 +10,7 @@ namespace U8ApiAuthCheck
 {
     internal static class Program
     {
-        private static readonly string[] DefaultU8AppProgIds = { "U8App.U8Login", "U8Login.U8App", "U8API.U8App" };
-        private static readonly string[] U8AppTypeNames = { "U8Login.U8App, U8Login", "U8API.U8App, U8API" };
+        private const string U8LoginProgId = "U8Login.clsLogin";
 
         private static int Main(string[] args)
         {
@@ -34,116 +33,72 @@ namespace U8ApiAuthCheck
 
         private static int RunCheck(U8Options options)
         {
-            object u8 = null;
+            object login = null;
             try
             {
-                u8 = CreateU8App(options.ProgId);
-                int ret = Convert.ToInt32(Invoke(u8, "Login", options.LoginArgs), CultureInfo.InvariantCulture);
-                if (ret != 0)
+                login = CreateLogin();
+                bool ok = InvokeLogin(login, options);
+                if (!ok)
                 {
-                    Console.Error.WriteLine("登录失败：" + ret);
+                    Console.Error.WriteLine("U8 登录失败");
                     return 1;
                 }
 
-                Console.WriteLine("登录成功");
-                object bill = Invoke(u8, "GetBill", options.BillArgs);
-                Console.WriteLine(bill == null ? "获取接口失败：无 API 授权或接口不存在" : "获取接口成功：有 API 授权");
-                return bill == null ? 1 : 0;
+                Console.WriteLine("U8 登录成功");
+                Console.WriteLine("ShareString: " + GetShareString(login));
+                return 0;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine("异常：" + Unwrap(ex).Message);
+                Console.Error.WriteLine("异常：" + DescribeException(ex));
                 return 1;
             }
             finally
             {
-                Logout(u8);
+                ReleaseCom(login);
                 PauseIfNeeded(options == null || options.Pause);
             }
         }
 
-        private static object CreateU8App(string configuredProgId)
+        private static object CreateLogin()
         {
-            foreach (string progId in GetProgIds(configuredProgId))
+            Type loginType = Type.GetTypeFromProgID(U8LoginProgId, false);
+            if (loginType == null)
             {
-                Type type = Type.GetTypeFromProgID(progId, false);
-                if (type != null)
-                {
-                    return Activator.CreateInstance(type);
-                }
+                throw new COMException("当前 Windows 环境未注册 " + U8LoginProgId);
             }
 
-            foreach (string typeName in U8AppTypeNames)
-            {
-                Type type = Type.GetType(typeName, false);
-                if (type != null)
-                {
-                    return Activator.CreateInstance(type);
-                }
-            }
-
-            throw new InvalidOperationException(BuildCreateObjectError(configuredProgId));
+            return Activator.CreateInstance(loginType);
         }
 
-        private static IEnumerable<string> GetProgIds(string configuredProgId)
+        private static bool InvokeLogin(object login, U8Options options)
         {
-            if (!string.IsNullOrWhiteSpace(configuredProgId))
-            {
-                yield return configuredProgId;
-            }
-
-            foreach (string progId in DefaultU8AppProgIds)
-            {
-                if (!string.Equals(progId, configuredProgId, StringComparison.OrdinalIgnoreCase))
-                {
-                    yield return progId;
-                }
-            }
+            object result = login.GetType().InvokeMember("Login", BindingFlags.InvokeMethod, null, login, options.LoginArgs);
+            return result is bool && (bool)result;
         }
 
-        private static string BuildCreateObjectError(string configuredProgId)
+        private static string GetShareString(object login)
         {
-            string tried = string.Join(", ", new List<string>(GetProgIds(configuredProgId)).ToArray());
-            return "未找到 U8App COM 对象。已尝试 ProgID：" + tried
-                + "。请确认在运行机器的 32 位 COM 注册表中能找到对应组件；如实际 ProgID 不同，请用 --prog-id 指定。";
+            object value = login.GetType().InvokeMember("ShareString", BindingFlags.GetProperty, null, login, null);
+            return Convert.ToString(value, CultureInfo.InvariantCulture);
         }
 
-        private static object Invoke(object target, string methodName, object[] args)
-        {
-            return target.GetType().InvokeMember(
-                methodName,
-                BindingFlags.InvokeMethod,
-                null,
-                target,
-                args,
-                CultureInfo.InvariantCulture);
-        }
-
-        private static Exception Unwrap(Exception ex)
+        private static string DescribeException(Exception ex)
         {
             TargetInvocationException invocation = ex as TargetInvocationException;
-            COMException com = ex as COMException;
             if (invocation != null && invocation.InnerException != null)
             {
-                return invocation.InnerException;
+                return invocation.InnerException.Message;
             }
 
-            return com ?? ex;
+            return ex.GetBaseException().Message;
         }
 
-        private static void Logout(object u8)
+        private static void ReleaseCom(object value)
         {
-            if (u8 == null)
+            if (value != null && Marshal.IsComObject(value))
             {
-                return;
-            }
-
-            try
-            {
-                Invoke(u8, "Logout", new object[0]);
-            }
-            catch
-            {
+                Marshal.FinalReleaseComObject(value);
             }
         }
 
@@ -197,8 +152,8 @@ namespace U8ApiAuthCheck
         private static void PrintUsage()
         {
             Console.WriteLine("用法：U8ApiAuthCheck.exe --server <服务器> --user <账号> --password <密码> --account <账套> --year <年度>");
-            Console.WriteLine("可选：--module IA --bill PurIn --prog-id U8App.U8Login --no-pause");
-            Console.WriteLine("也支持环境变量：U8_SERVER, U8_USER, U8_PASSWORD, U8_ACCOUNT, U8_YEAR, U8_BILL_MODULE, U8_BILL_TYPE, U8_APP_PROG_ID");
+            Console.WriteLine("可选：--login-date yyyy-MM-dd --sub-id AS --serial <序列号> --account-id (default)@003 --no-pause");
+            Console.WriteLine("也支持环境变量：U8_SERVER, U8_USER, U8_PASSWORD, U8_ACCOUNT, U8_ACCOUNT_ID, U8_YEAR, U8_LOGIN_DATE, U8_SUB_ID, U8_SERIAL");
         }
 
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -211,37 +166,33 @@ namespace U8ApiAuthCheck
         public string User { get; private set; }
         public string Password { get; private set; }
         public string Account { get; private set; }
+        public string AccountId { get; private set; }
         public string Year { get; private set; }
-        public string Module { get; private set; }
-        public string Bill { get; private set; }
-        public string ProgId { get; private set; }
+        public string LoginDate { get; private set; }
+        public string SubId { get; private set; }
+        public string Serial { get; private set; }
         public bool Pause { get; private set; }
 
         public object[] LoginArgs
         {
-            get { return new object[] { Server, User, Password, Account, Year, LoginModeValue }; }
+            get { return new object[] { SubId, AccountId, Year, User, Password, LoginDate, Server, Serial }; }
         }
-
-        public object[] BillArgs
-        {
-            get { return new object[] { Module, Bill }; }
-        }
-
-        private const int LoginModeValue = 0;
 
         public static bool TryCreate(string[] args, out U8Options options, out string error)
         {
             Dictionary<string, string> values = ParseArgs(args);
+            string account = GetValue(values, "account", "U8_ACCOUNT");
             options = new U8Options
             {
                 Server = GetValue(values, "server", "U8_SERVER"),
                 User = GetValue(values, "user", "U8_USER"),
-                Password = GetValue(values, "password", "U8_PASSWORD"),
-                Account = GetValue(values, "account", "U8_ACCOUNT"),
+                Password = GetValue(values, "password", "U8_PASSWORD", string.Empty),
+                Account = account,
+                AccountId = GetValue(values, "account-id", "U8_ACCOUNT_ID") ?? FormatAccountId(account),
                 Year = GetValue(values, "year", "U8_YEAR"),
-                Module = GetValue(values, "module", "U8_BILL_MODULE", "IA"),
-                Bill = GetValue(values, "bill", "U8_BILL_TYPE", "PurIn"),
-                ProgId = GetValue(values, "prog-id", "U8_APP_PROG_ID"),
+                LoginDate = GetValue(values, "login-date", "U8_LOGIN_DATE", DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                SubId = GetValue(values, "sub-id", "U8_SUB_ID", "AS"),
+                Serial = GetValue(values, "serial", "U8_SERIAL", string.Empty),
                 Pause = !values.ContainsKey("no-pause")
             };
 
@@ -283,13 +234,24 @@ namespace U8ApiAuthCheck
             return Environment.GetEnvironmentVariable(envName) ?? defaultValue;
         }
 
+        private static string FormatAccountId(string account)
+        {
+            if (string.IsNullOrWhiteSpace(account) || account.IndexOf("@", StringComparison.Ordinal) >= 0)
+            {
+                return account;
+            }
+
+            return "(default)@" + account;
+        }
+
         private static string Validate(U8Options options)
         {
             if (string.IsNullOrWhiteSpace(options.Server)) return "缺少服务器：--server 或 U8_SERVER";
             if (string.IsNullOrWhiteSpace(options.User)) return "缺少账号：--user 或 U8_USER";
-            if (string.IsNullOrWhiteSpace(options.Password)) return "缺少密码：--password 或 U8_PASSWORD";
             if (string.IsNullOrWhiteSpace(options.Account)) return "缺少账套：--account 或 U8_ACCOUNT";
+            if (string.IsNullOrWhiteSpace(options.AccountId)) return "缺少账套标识：--account-id 或 U8_ACCOUNT_ID";
             if (string.IsNullOrWhiteSpace(options.Year)) return "缺少年度：--year 或 U8_YEAR";
+            if (string.IsNullOrWhiteSpace(options.LoginDate)) return "缺少登录日期：--login-date 或 U8_LOGIN_DATE";
             return null;
         }
     }

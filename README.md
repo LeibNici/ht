@@ -1,6 +1,6 @@
 # U8ApiAuthCheck
 
-用于检查当前 U8 环境是否能登录并获取指定 U8 API 单据接口的 Windows x86 控制台程序。
+用于检查当前 U8 环境是否能通过官方 `U8Login.clsLogin` 登录的 Windows x86 控制台程序。
 
 ## 本地运行
 
@@ -13,7 +13,7 @@
 可选参数：
 
 ```powershell
---module IA --bill PurIn --prog-id U8App.U8Login --no-pause
+--login-date yyyy-MM-dd --sub-id AS --serial <序列号> --account-id "(default)@003" --no-pause
 ```
 
 也可以使用环境变量：
@@ -27,7 +27,7 @@ $env:U8_YEAR="<年度>"
 .\U8ApiAuthCheck.exe
 ```
 
-如果提示未找到 U8App，但机器确认已安装 U8，请先确认 U8 登录组件的真实 ProgID。程序默认依次尝试 `U8App.U8Login`、`U8Login.U8App`、`U8API.U8App`；如客户环境不同，可以用 `--prog-id <ProgID>` 或环境变量 `U8_APP_PROG_ID` 指定。
+程序使用 `U8Login.clsLogin`，与 `xinchuan-u8-bridge` 的登录方式一致。`--account 003` 会自动转换为 U8 常用的 `--account-id "(default)@003"`；如果现场账套标识不同，可以直接传 `--account-id` 或环境变量 `U8_ACCOUNT_ID`。
 
 ## GitHub Actions 产物
 
