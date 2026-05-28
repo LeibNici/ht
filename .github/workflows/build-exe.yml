@@ -1,0 +1,39 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build Release x86
+        shell: pwsh
+        run: msbuild U8ApiAuthCheck.csproj /restore /p:Configuration=Release /p:Platform=x86 /m
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $publish = Join-Path $env:GITHUB_WORKSPACE "publish"
+          New-Item -ItemType Directory -Force -Path $publish | Out-Null
+          Copy-Item "bin\x86\Release\*" $publish -Recurse -Force
+          Compress-Archive -Path "$publish\*" -DestinationPath "U8ApiAuthCheck-win-x86.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: U8ApiAuthCheck-win-x86
+          path: U8ApiAuthCheck-win-x86.zip
+          if-no-files-found: error
